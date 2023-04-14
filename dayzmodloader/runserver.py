@@ -252,6 +252,10 @@ class ModLoaderApp(QWidget):
                         except OSError as e:
                             QtWidgets.QMessageBox.warning(self, "Error", f"Failed to create symlink: {e}")
 
+                # Print the original mod path from the symlink
+                original_mod_path = os.readlink(mod_symlink_path)
+                print(f"Original mod path: {original_mod_path}")
+
                 mod_list_mods.append(mod_symlink_path)
 
             mod_list["mods"] = mod_list_mods
@@ -260,12 +264,6 @@ class ModLoaderApp(QWidget):
 
             self.update_mod_and_config_tables()
 
-
-            mod_list["mods"] = mod_list_mods
-            self.mods[mod_list_name] = mod_list
-
-            save_mods(self.MODS_JSON_PATH, self.mods)
-            self.update_mod_and_config_tables()
     
     def symlink_exists_in_other_mod_lists(self, mod_list_name, symlink):
         for list_name, mod_list in self.mods.items():
@@ -424,10 +422,8 @@ class ModLoaderApp(QWidget):
 
         # Combine all the mod names into a single string
         mod_names = ";".join(os.path.basename(mod_path) for mod_path in mod_list_mods)
-
         # Get server options
         server_options = self.mods.get(mod_list_name, {}).get("server_options", {})
-
         profiles_path = server_options.get("profiles_path", "")
         nosplash = server_options.get("nosplash", False)
         no_pause = server_options.get("no_pause", False)
@@ -442,7 +438,7 @@ class ModLoaderApp(QWidget):
         # Construct the command line
         folder_name = os.path.basename(profiles_path)
         cmd = (
-            f'-config=serverDZ.cfg -port=2302 -profiles="{folder_name}" '
+            f'-config=serverDZ.cfg -server -port=2302 -profiles="{folder_name}" '
             f'{("-nosplash" if nosplash else "")} '
             f'{("-noPause" if no_pause else "")} '
             f'{("-noBenchmark" if no_benchmark else "")} '
@@ -466,9 +462,10 @@ class ModLoaderApp(QWidget):
 
     def run_server_command(self, cmd):
         os.chdir(self.server_path)
-        server_exe_path = os.path.join(self.server_path, "DayZServer_x64.exe")
+        server_exe_path = os.path.join(self.workshop_path, "..", "..", "DayZ", "DayZDiag_x64.exe")
+        
         # Remove the server executable name from the command string
-        cmd = cmd.replace("DayZServer_x64.exe", "").strip()
+        cmd = cmd.replace("DayZDiag_x64.exe", "").strip()
         # Split the command string using shlex
         import shlex
         cmd_list = shlex.split(cmd)
@@ -477,6 +474,11 @@ class ModLoaderApp(QWidget):
         print(f"cmd: {cmd}")
         print(f"cmd_list: {cmd_list}")
         subprocess.Popen(cmd_list)
+
+    @staticmethod
+    def remove_prefix(s, prefix):
+        return s[len(prefix):] if s.startswith(prefix) else s
+    
 
     def run_client_command(self):
         mod_list_name = self.get_selected_mod_list_name()
@@ -490,18 +492,40 @@ class ModLoaderApp(QWidget):
             QMessageBox.critical(None, "Error", "The selected mod list is empty.")
             return
 
-       # Combine all the mod names into a single string, surrounded by double quotes
-        mod_names = f'{";".join(os.path.basename(mod_path) for mod_path in mod_list_mods)}'
+        # Combine all the mod names into a single string, surrounded by double quotes
+        stripped_mod_paths = [self.remove_prefix(mod_path, "\\\\?\\").replace('\\', '/', -1) for mod_path in mod_list_mods]
+
+
+
+        mod_names = ";".join(stripped_mod_paths)
 
         # Construct the command line
-        cmd = (f'DayZ_x64.exe "-mod={mod_names}"')
+        cmd = (f'DayZDiag_x64.exe "-mod={mod_names}"')
 
         # Launch the DayZ client with the command line options
-
-        client_exe_path = os.path.join(self.workshop_path, "..", "..", "DayZ", "DayZ_x64.exe")
+        client_exe_path = os.path.join(self.workshop_path, "..", "..", "DayZ", "DayZDiag_x64.exe")
         print(f"Client executable path: {client_exe_path}")
-    
-        
+
+        # Show the command line in a message box
+        msg_box = QtWidgets.QMessageBox()
+        msg_box.setWindowTitle("Command Line")
+        msg_box.setText("The command line to start the client is:")
+        msg_box.setInformativeText(cmd)
+        msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        result = msg_box.exec_()
+        if result == QMessageBox.Ok:
+            os.chdir(os.path.dirname(client_exe_path))
+            cmd = cmd.replace("DayZDiag_x64.exe", "").strip()
+            import shlex
+            cmd_list = shlex.split(cmd)
+            cmd_list.insert(0, client_exe_path)
+            subprocess.Popen(cmd_list)
+
+
+    def launch_client(self, cmd):
+        client_exe_path = os.path.join(self.workshop_path, "..", "..", "DayZ", "DayZ_BE.exe")
+        print(f"Client executable path: {client_exe_path}")
+
         print(f"Initial command: {cmd}")
         os.chdir(os.path.dirname(client_exe_path))
         cmd = cmd.replace("DayZ_x64.exe", "").strip()
@@ -512,7 +536,6 @@ class ModLoaderApp(QWidget):
         cmd_list.insert(0, client_exe_path)
         print(f"Command list with client executable path: {cmd_list}")
         subprocess.Popen(cmd_list)
-
 
 
 
