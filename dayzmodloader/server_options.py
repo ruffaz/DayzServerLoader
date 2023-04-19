@@ -12,7 +12,13 @@ class ServerOptions(QtWidgets.QDialog):
         self.profiles_path_edit = QtWidgets.QLineEdit()
         self.profiles_path_button = QtWidgets.QPushButton("Browse...")
         self.profiles_path_button.clicked.connect(self.on_profiles_path_button_clicked)
+
+        self.mission_label = QtWidgets.QLabel("(DZDIAG) Mission:")
+        self.mission_path_edit = QtWidgets.QLineEdit()
+        self.mission_button = QtWidgets.QPushButton("Browse...")
+        self.mission_button.clicked.connect(self.on_mission_button_clicked)
         
+        self.nonavmesh_checkbox = QtWidgets.QCheckBox("No NavMesh")
         self.nosplash_checkbox = QtWidgets.QCheckBox("No Splash")
         self.nopause_checkbox = QtWidgets.QCheckBox("No Pause")
         self.nobenchmark_checkbox = QtWidgets.QCheckBox("No Benchmark")
@@ -33,8 +39,14 @@ class ServerOptions(QtWidgets.QDialog):
         profiles_layout.addWidget(self.profiles_path_label)
         profiles_layout.addWidget(self.profiles_path_edit)
         profiles_layout.addWidget(self.profiles_path_button)
+
+        mission_layout = QtWidgets.QHBoxLayout()
+        mission_layout.addWidget(self.mission_label)
+        mission_layout.addWidget(self.mission_path_edit)
+        mission_layout.addWidget(self.mission_button)
         
         checkboxes_layout = QtWidgets.QVBoxLayout()
+        checkboxes_layout.addWidget(self.nonavmesh_checkbox)
         checkboxes_layout.addWidget(self.nosplash_checkbox)
         checkboxes_layout.addWidget(self.nopause_checkbox)
         checkboxes_layout.addWidget(self.nobenchmark_checkbox)
@@ -52,6 +64,7 @@ class ServerOptions(QtWidgets.QDialog):
         
         main_layout = QtWidgets.QVBoxLayout()
         main_layout.addLayout(profiles_layout)
+        main_layout.addLayout(mission_layout) 
         main_layout.addLayout(checkboxes_layout)
         main_layout.addLayout(buttons_layout)
         
@@ -62,9 +75,17 @@ class ServerOptions(QtWidgets.QDialog):
         if profiles_path:
             self.profiles_path_edit.setText(profiles_path)
 
+    def on_mission_button_clicked(self):
+        mission_path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Mission Folder")
+        if mission_path:
+            self.mission_path_edit.setText(mission_path)
+
+
     def get_options(self):
         self.server_flags = ""
         options = ""
+        if self.nonavmesh_checkbox.isChecked():
+            options += " -nonavmesh"
         if self.nosplash_checkbox.isChecked():
             options += " -nosplash"
         if self.nopause_checkbox.isChecked():
@@ -87,3 +108,6 @@ class ServerOptions(QtWidgets.QDialog):
 
     def set_profiles_path(self, path):
         self.profiles_path_edit.setText(path)
+
+    def set_mission_path(self, path):
+        self.mission_path_edit.setText(path)

@@ -6,7 +6,6 @@ def load_mods(mods_json_path):
     if os.path.exists(mods_json_path):
         with open(mods_json_path, "r") as f:
             mods = json.load(f)
-            print(f"Loaded mods: {mods}")
     return mods
 
 def save_mods(mods_json_path, mods):
@@ -42,8 +41,10 @@ def load_configs(configs_json_path):
     if os.path.exists(configs_json_path):
         with open(configs_json_path) as f:
             data = json.load(f)
-            print("Loaded configs data:", data)
             mod_lists = data.get("mod_lists", {})
             for mod_list_name, mod_list_data in mod_lists.items():
-                configs[mod_list_name] = {"configs": mod_list_data.get("configs", {})}
+                configs[mod_list_name] = {
+                    "configs": mod_list_data.get("configs", {}),
+                    "dz_config": mod_list_data.get("dz_config", "")
+                }
     return configs
