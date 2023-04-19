@@ -150,15 +150,12 @@ class ModLoaderApp(QWidget):
         # Server options
         server_box = QGroupBox("Server Options")
         server_options_vbox = QHBoxLayout(server_box)
-       
         server_options_vbox.addWidget(self.select_workshop_button)
         server_options_vbox.addWidget(self.select_server_button)
-
         server_checkbox_hbox = QHBoxLayout()
         server_checkbox_hbox.addWidget(self.server_checkbox)
         server_options_vbox.addLayout(server_checkbox_hbox)
         server_options_vbox.addWidget(start_button)
-
         line = QtWidgets.QFrame()
         line.setFrameShape(QtWidgets.QFrame.HLine)
         line.setFrameShadow(QtWidgets.QFrame.Sunken)
@@ -198,13 +195,11 @@ class ModLoaderApp(QWidget):
             )
             self.streamdata = child.communicate()[0]
             rc = child.returncode
-
             if rc == 0:
                 # extract target path from the output
                 output = self.streamdata.decode()
                 target = re.search(r"Substitute Name: (.*)\n", output).group(1).strip()
                 return target
-
         return None
  
     def show_server_options(self, row):
@@ -247,7 +242,6 @@ class ModLoaderApp(QWidget):
                 "net_log": server_options_dialog.netlog_checkbox.isChecked(),
                 "scr_allow_file_write": server_options_dialog.scrallowfilewrite_checkbox.isChecked()
             }
-
             # Save updated mods data
             save_mods(self.MODS_JSON_PATH, self.mods)
 
