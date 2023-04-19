@@ -1,12 +1,12 @@
 # serveroptions.py
-
+import os
 from PyQt5 import QtWidgets
 
 class ServerOptions(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Server Options")
-        
+   
         # Create widgets
         self.profiles_path_label = QtWidgets.QLabel("Profiles Path:")
         self.profiles_path_edit = QtWidgets.QLineEdit()
@@ -69,7 +69,8 @@ class ServerOptions(QtWidgets.QDialog):
         main_layout.addLayout(buttons_layout)
         
         self.setLayout(main_layout)
-        
+
+       
     def on_profiles_path_button_clicked(self):
         profiles_path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select DayzServerProfile folder")
         if profiles_path:

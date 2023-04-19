@@ -25,17 +25,6 @@ def save_paths(paths_json_path, paths):
     with open(paths_json_path, "w") as f:
          f.write(json.dumps(paths))
 
-
-def store_dz_config(mods_json_path, mod_list_name, dzconfig_path):
-    if os.path.exists(mods_json_path):
-        with open(mods_json_path, "r") as f:
-            data = json.load(f)
-
-        data["mod_lists"][mod_list_name]["dz_config"] = dzconfig_path
-
-        with open(mods_json_path, "w") as f:
-            json.dump(data, f, indent=4)
-
 def load_configs(configs_json_path):
     configs = {}
     if os.path.exists(configs_json_path):
