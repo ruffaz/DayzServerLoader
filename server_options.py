@@ -1,5 +1,4 @@
 # serveroptions.py
-import os
 from PyQt5 import QtWidgets
 
 
@@ -101,8 +100,17 @@ class ServerOptions(QtWidgets.QDialog):
     def on_dzconfig_button_clicked(self):
         dzconfig_path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Select DZConfig", self.server_path, "DZConfig files (*.cfg)")
         if dzconfig_path:
+            print("Selected DZConfig:", dzconfig_path)
             self.dzconfig_path_edit.setText(dzconfig_path)
+    
+    def set_dzconfig_path_edit(self, path):
+        self.dzconfig_path_edit.setText(path)   
 
+    def set_profiles_path(self, path):
+        self.profiles_path_edit.setText(path)
+
+    def set_mission_path(self, path):
+        self.mission_path_edit.setText(path)
 
 
 
@@ -131,11 +139,6 @@ class ServerOptions(QtWidgets.QDialog):
             options += " -scrAllowFileWrite"
         return options
 
-    def set_profiles_path(self, path):
-        self.profiles_path_edit.setText(path)
-
-    def set_mission_path(self, path):
-        self.mission_path_edit.setText(path)
 
 
 

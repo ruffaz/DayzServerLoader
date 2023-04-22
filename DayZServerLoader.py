@@ -14,7 +14,7 @@ from subprocess import CalledProcessError
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication, QWidget, QFileDialog, QMessageBox, QInputDialog, QTableWidget, QMainWindow, QCheckBox, QLabel, QPushButton, QHeaderView,QVBoxLayout, QHBoxLayout, QGroupBox
-from json_io  import load_mods, save_mods, load_configs, load_paths, save_paths
+from json_io  import load_mods, save_mods, load_paths, save_paths, load_configs
 from server_options import ServerOptions
 
 import qtmodern.styles
@@ -203,64 +203,6 @@ class ModLoaderApp(QWidget):
                 return target
 
         return None
- 
-    def show_server_options(self, row):
-        mod_list_name = self.mod_list_table.item(row, 0).text()
-        if not mod_list_name:
-            QMessageBox.critical(None, "Error", "Please select a mod list.")
-            return
-        
-        server_options_dialog = ServerOptions(self.server_path, self)
-        server_options = self.mods.get(mod_list_name, {}).get("server_options", {})
-        server_options_dialog.dzconfig_path_edit.setText(server_options.get("dz_config", ""))
-        server_options_dialog.set_profiles_path(server_options.get("profiles_path", ""))
-        server_options_dialog.set_mission_path(server_options.get("mission_path", ""))
-        # dzconfig path is elsewhere for he moment
-
-        # Set checkboxes
-        server_options_dialog.nonavmesh_checkbox.setChecked(server_options.get("nonavmesh", False))
-        server_options_dialog.nosplash_checkbox.setChecked(server_options.get("nosplash", False))
-        server_options_dialog.nopause_checkbox.setChecked(server_options.get("no_pause", False))
-        server_options_dialog.nobenchmark_checkbox.setChecked(server_options.get("no_benchmark", False))
-        server_options_dialog.filepatching_checkbox.setChecked(server_options.get("file_patching", False))
-        server_options_dialog.dologs_checkbox.setChecked(server_options.get("do_logs", False))
-        server_options_dialog.scriptdebug_checkbox.setChecked(server_options.get("script_debug", False))
-        server_options_dialog.adminlog_checkbox.setChecked(server_options.get("admin_log", False))
-        server_options_dialog.netlog_checkbox.setChecked(server_options.get("net_log", False))
-        server_options_dialog.scrallowfilewrite_checkbox.setChecked(server_options.get("scr_allow_file_write", False))
-
-        if server_options_dialog.exec_() == QtWidgets.QDialog.Accepted:
-            # Update server options
-            self.mods[mod_list_name]["server_options"] = {
-                
-             
-                "profiles_path": server_options_dialog.profiles_path_edit.text(),
-                "mission_path": server_options_dialog.mission_path_edit.text(),
-                "dz_config": server_options_dialog.dzconfig_path_edit.text(),
-                "nonavmesh": server_options_dialog.nonavmesh_checkbox.isChecked(),
-                "nosplash": server_options_dialog.nosplash_checkbox.isChecked(),
-                "no_pause": server_options_dialog.nopause_checkbox.isChecked(),
-                "no_benchmark": server_options_dialog.nobenchmark_checkbox.isChecked(),
-                "file_patching": server_options_dialog.filepatching_checkbox.isChecked(),
-                "do_logs": server_options_dialog.dologs_checkbox.isChecked(),
-                "script_debug": server_options_dialog.scriptdebug_checkbox.isChecked(),
-                "admin_log": server_options_dialog.adminlog_checkbox.isChecked(),
-                "net_log": server_options_dialog.netlog_checkbox.isChecked(),
-                "scr_allow_file_write": server_options_dialog.scrallowfilewrite_checkbox.isChecked()
-            }
-
-            save_mods(self.MODS_JSON_PATH, self.mods)
-            self.update_mod_and_config_tables()
-
-
-            # Save updated mods data
-            save_mods(self.MODS_JSON_PATH, self.mods)
-            dzconfig_path = server_options_dialog.dzconfig_path
-            if dzconfig_path:
-                mod_list = self.mods[mod_list_name]
-                mod_list["dz_config"] = dzconfig_path
-                save_mods(self.MODS_JSON_PATH, self.mods)
-                self.update_mod_and_config_tables()
 
     def browse_workshop_path(self):
         workshop_path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select workshop path")
@@ -307,17 +249,19 @@ class ModLoaderApp(QWidget):
 
                 if not self.symlink_exists_in_other_mod_lists(mod_list_name, mod_symlink_path):
                     if not is_symlink:
+                        if os.path.commonprefix([mod_path, self.server_path]) == self.server_path:
+                            QtWidgets.QMessageBox.warning(self, "Error", "Cannot add a mod that is in the server path. Please use mods from the !Workshop folder or your local P: drive.")
+                            continue
                         try:
                             subprocess.check_call('mklink /J "%s" "%s"' % (mod_symlink_path, mod_path), shell=True)
                         except CalledProcessError as e:
                             QtWidgets.QMessageBox.warning(self, "Error", f"Failed to create symlink: {e}")
                     else:
                         print(f"Symlink already exists: {mod_symlink_path}")
-
-                # Print the original mod path from the symlink
-                original_mod_path = os.readlink(mod_symlink_path)
-                print(f"Original mod path: {original_mod_path}")
-                mod_list_mods.append(mod_symlink_path)
+                        # Print the original mod path from the symlink
+                        original_mod_path = os.readlink(mod_symlink_path)
+                        print(f"Original mod path: {original_mod_path}")
+                        mod_list_mods.append(mod_symlink_path)
 
             mod_list["mods"] = mod_list_mods
             self.mods[mod_list_name] = mod_list
@@ -325,6 +269,9 @@ class ModLoaderApp(QWidget):
             self.update_mod_and_config_tables()
 
         print("Done adding mods")
+
+
+
 
     def remove_selected_mod(self, row):
         mod_list_name = self.get_selected_mod_list_name()
@@ -540,7 +487,61 @@ class ModLoaderApp(QWidget):
             # Select the newly created mod list
             self.mod_list_table.setCurrentCell(row, 0)
     
-# defs commandline
+# defs server run
+ 
+    def show_server_options(self, row):
+        mod_list_name = self.mod_list_table.item(row, 0).text()
+        if not mod_list_name:
+            QMessageBox.critical(None, "Error", "Please select a mod list.")
+            return
+        
+        server_options_dialog = ServerOptions(self.server_path, self)
+        server_options = self.mods.get(mod_list_name, {}).get("server_options", {})
+        print("Before setting DZConfig:", server_options.get("dz_config", ""))
+        server_options_dialog.set_dzconfig_path_edit(server_options.get("dz_config", ""))
+        server_options_dialog.set_profiles_path(server_options.get("profiles_path", ""))
+        server_options_dialog.set_mission_path(server_options.get("mission_path", ""))
+        # dzconfig path is elsewhere for the moment
+
+        # Set checkboxes
+        server_options_dialog.nonavmesh_checkbox.setChecked(server_options.get("nonavmesh", False))
+        server_options_dialog.nosplash_checkbox.setChecked(server_options.get("nosplash", False))
+        server_options_dialog.nopause_checkbox.setChecked(server_options.get("no_pause", False))
+        server_options_dialog.nobenchmark_checkbox.setChecked(server_options.get("no_benchmark", False))
+        server_options_dialog.filepatching_checkbox.setChecked(server_options.get("file_patching", False))
+        server_options_dialog.dologs_checkbox.setChecked(server_options.get("do_logs", False))
+        server_options_dialog.scriptdebug_checkbox.setChecked(server_options.get("script_debug", False))
+        server_options_dialog.adminlog_checkbox.setChecked(server_options.get("admin_log", False))
+        server_options_dialog.netlog_checkbox.setChecked(server_options.get("net_log", False))
+        server_options_dialog.scrallowfilewrite_checkbox.setChecked(server_options.get("scr_allow_file_write", False))
+
+        if server_options_dialog.exec_() == QtWidgets.QDialog.Accepted:
+            print("Mod list name:", mod_list_name)
+            print("Current mods:", self.mods)
+            print("DZ Config path:", server_options_dialog.dzconfig_path_edit.text())
+            # Update server options
+            self.mods[mod_list_name]["server_options"] = {
+                
+                "profiles_path": server_options_dialog.profiles_path_edit.text(),
+                "mission_path": server_options_dialog.mission_path_edit.text(),
+                "dz_config": server_options_dialog.dzconfig_path_edit.text(),
+                "nonavmesh": server_options_dialog.nonavmesh_checkbox.isChecked(),
+                "nosplash": server_options_dialog.nosplash_checkbox.isChecked(),
+                "no_pause": server_options_dialog.nopause_checkbox.isChecked(),
+                "no_benchmark": server_options_dialog.nobenchmark_checkbox.isChecked(),
+                "file_patching": server_options_dialog.filepatching_checkbox.isChecked(),
+                "do_logs": server_options_dialog.dologs_checkbox.isChecked(),
+                "script_debug": server_options_dialog.scriptdebug_checkbox.isChecked(),
+                "admin_log": server_options_dialog.adminlog_checkbox.isChecked(),
+                "net_log": server_options_dialog.netlog_checkbox.isChecked(),
+                "scr_allow_file_write": server_options_dialog.scrallowfilewrite_checkbox.isChecked()
+            }
+            print("After accepting DZConfig:", server_options_dialog.dzconfig_path_edit.text())
+            self.mods[mod_list_name]["server_options"]["dz_config"] = server_options_dialog.dzconfig_path_edit.text()
+
+            save_mods(self.MODS_JSON_PATH, self.mods)
+            self.update_mod_and_config_tables()
+
     def server_commandline(self, mod_list_name):
         mod_list = self.mods[mod_list_name]
         mod_list_mods = mod_list.get("mods", [])
@@ -555,6 +556,9 @@ class ModLoaderApp(QWidget):
         server_options = self.mods.get(mod_list_name, {}).get("server_options", {})
         mission_path = server_options.get("mission_path", "")
         profiles_path = server_options.get("profiles_path", "")
+        dz_config_path = server_options.get("dz_config", "")
+
+        print("DZ Config Path:", dz_config_path)
         nonavmesh = server_options.get("nonavmesh", False)
         nosplash = server_options.get("nosplash", False)
         no_pause = server_options.get("no_pause", False)
@@ -566,9 +570,8 @@ class ModLoaderApp(QWidget):
         net_log = server_options.get("net_log", False)
         scr_allow_file_write = server_options.get("scr_allow_file_write", False)
 
-        # Get dzconfig.cfg
-        dz_config_path = self.mods.get(mod_list_name, {}).get("dz_config", "")
-
+     
+        print("Server Options:", server_options)
         # Construct the command line with some defaults because we need dzdiag to run as server
         mission_path = os.path.normpath(mission_path)
         dz_config_path = os.path.normpath(dz_config_path)
