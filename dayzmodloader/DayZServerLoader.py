@@ -261,7 +261,8 @@ class ModLoaderApp(QWidget):
                         # Print the original mod path from the symlink
                         original_mod_path = os.readlink(mod_symlink_path)
                         print(f"Original mod path: {original_mod_path}")
-                        mod_list_mods.append(mod_symlink_path)
+                    
+                    mod_list_mods.append(mod_path)
 
             mod_list["mods"] = mod_list_mods
             self.mods[mod_list_name] = mod_list
