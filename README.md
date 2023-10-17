@@ -4,6 +4,7 @@
 
 -- Description --
 Target users: mappers, artists and modders. Simple mod loader, that can load a Dayz Client and Server using prefefined mod lists. 
+
 Can run as pure server, dxdiag server/client combo, or client only for dayzeditor
 Uses symlinks, and shares symlinks acros lists logically
 
