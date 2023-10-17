@@ -9,11 +9,11 @@ __version__ = "1.0"
 __email__ = "ruffazguts@gmail.com"
 __status__ = "Proto"
 
-import sys, json, os, subprocess, shlex, re
+import sys, json, os, subprocess, shlex, re, copy
 from subprocess import CalledProcessError
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QApplication, QWidget, QFileDialog, QMessageBox, QInputDialog, QTableWidget, QMainWindow, QCheckBox, QLabel, QPushButton, QHeaderView,QVBoxLayout, QHBoxLayout, QGroupBox
+from PyQt5.QtWidgets import QApplication, QWidget, QFileDialog, QMessageBox, QInputDialog, QTableWidget, QMainWindow, QComboBox, QLabel, QPushButton, QHeaderView,QVBoxLayout, QHBoxLayout, QGroupBox
 from json_io  import load_mods, save_mods, load_paths, save_paths, load_configs
 from server_options import ServerOptions
 
@@ -23,7 +23,7 @@ import qtmodern.windows
 class ModLoaderMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("DZServer Loader")
+        self.setWindowTitle("DZMod Loader")
         self.setMinimumWidth(1000)
         # Create an instance of ModLoaderApp
         self.mod_loader_app = ModLoaderApp()
@@ -34,7 +34,7 @@ class ModLoaderApp(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("DZServer Loader")
+        self.setWindowTitle("DZModLoader")
         # Pathing for json data
         script_path = os.path.abspath(__file__)
         script_dir = os.path.dirname(script_path)
@@ -76,17 +76,19 @@ class ModLoaderApp(QWidget):
         self.mod_list_table.setMinimumWidth(400)
         self.mod_list_table.setMaximumWidth(int(self.width() * 0.3))
 
-        mod_list_label = QLabel("Available mod lists:")
-        create_modlist_button = QPushButton("Create new mod list", self)
+        mod_list_label = QLabel("Available Mod Lists:")
+        create_modlist_button = QPushButton("Create New", self)
         create_modlist_button.clicked.connect(self.create_new_mod_list)
-        delete_modlist_button = QPushButton("Delete selected mod list", self)
+        delete_modlist_button = QPushButton("Delete Selected", self)
         delete_modlist_button.clicked.connect(self.delete_mod_list)
+        duplicate_modlist_button = QPushButton("Duplicate Selected", self)
+        duplicate_modlist_button.clicked.connect(self.duplicate_mod_list)
 
         self.mod_table = QTableWidget(self)
         self.mod_table.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
         self.mod_table.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustToContents)
         self.mod_table.setColumnCount(3)
-        self.mod_table.setHorizontalHeaderLabels(["Mod Name", "Source", "Delete"])
+        self.mod_table.setHorizontalHeaderLabels(["Mod Name", "Source", "Remove from Modlist"])
 
         self.mod_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.mod_table.verticalHeader().setVisible(False)
@@ -102,13 +104,24 @@ class ModLoaderApp(QWidget):
         self.select_workshop_button.clicked.connect(self.browse_workshop_path)
         self.select_server_button = QPushButton(f"Server Path ({self.server_path})" if self.server_path else "Server Path")
         self.select_server_button.clicked.connect(self.browse_server_path)
-        start_button = QPushButton("Start server", self)
-        start_button.clicked.connect(lambda: self.server_commandline(self.mod_list_table.currentItem().text()) if self.mod_list_table.currentItem() else QMessageBox.warning(self, "Warning", "Please select a mod list before starting the server."))
 
+        self.function_combobox = QComboBox()
+        self.function_combobox.addItem("Server Only")
+        self.function_combobox.addItem("Diag_x64 Combo")
+        self.function_combobox.addItem("Client Only")
+        default_index = 1
+        self.function_combobox.setCurrentIndex(default_index)
 
-        self.server_checkbox = QCheckBox("Dayz_Diag_x64 as server/client", self)
-        self.server_checkbox.setChecked(True)
+        self.function_combobox.currentIndexChanged.connect(self.update_start_button_text)
+
         self.mods_label = QLabel(self)
+        self.start_button = QPushButton("Start", self)
+        self.start_button.clicked.connect(lambda: self.server_commandline(self.mod_list_table.currentItem().text()) if self.mod_list_table.currentItem() else QMessageBox.warning(self, "Warning", "Please select a mod list before starting the server."))
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.function_combobox)
+        layout.addWidget(self.mods_label)
+        layout.addWidget(self.start_button)
 
         # Add mod list names to the table
         mod_names = list(self.mods.keys())
@@ -127,7 +140,6 @@ class ModLoaderApp(QWidget):
             button = QPushButton("Options")
             button.clicked.connect(lambda _, r=row: self.show_server_options(r))
             self.mod_list_table.setCellWidget(row, 1, button)
-
        
         # modlist layout
         modlist_vbox = QVBoxLayout()
@@ -136,6 +148,7 @@ class ModLoaderApp(QWidget):
         modlist_button_hbox = QHBoxLayout()
         modlist_button_hbox.addWidget(create_modlist_button)
         modlist_button_hbox.addWidget(delete_modlist_button)
+        modlist_button_hbox.addWidget(duplicate_modlist_button)
         modlist_vbox.addLayout(modlist_button_hbox)
 
         # mod layout server_options_vbox.addWidget(self.mods_label)
@@ -154,9 +167,10 @@ class ModLoaderApp(QWidget):
         server_options_vbox.addWidget(self.select_server_button)
 
         server_checkbox_hbox = QHBoxLayout()
-        server_checkbox_hbox.addWidget(self.server_checkbox)
         server_options_vbox.addLayout(server_checkbox_hbox)
-        server_options_vbox.addWidget(start_button)
+        server_options_vbox.addWidget(self.function_combobox)
+        server_options_vbox.addWidget(self.mods_label)
+        server_options_vbox.addWidget(self.start_button)
 
         line = QtWidgets.QFrame()
         line.setFrameShape(QtWidgets.QFrame.HLine)
@@ -173,7 +187,22 @@ class ModLoaderApp(QWidget):
         vbox.addWidget(server_box)
         self.setLayout(vbox)
 
+        # Version label not auto
+        version_label = QLabel("Version: 1.0.1") 
+        version_label.setAlignment(Qt.AlignRight) 
+        vbox.addWidget(version_label)
+
 # defs general
+
+    def update_start_button_text(self, index):
+        selected_option = self.function_combobox.currentText()
+
+        if selected_option == "Server Only":
+            self.start_button.setText("Start Server")
+        elif selected_option == "Diag_x64 Combo":
+            self.start_button.setText("Start Diag_x64")
+        elif selected_option == "Client Only":
+            self.start_button.setText("Start Client")
 
     def create_data_folder(self):
             data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -203,7 +232,7 @@ class ModLoaderApp(QWidget):
                 return target
 
         return None
-
+         
     def browse_workshop_path(self):
         workshop_path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select workshop path")
         if workshop_path:
@@ -243,6 +272,7 @@ class ModLoaderApp(QWidget):
             mod_list_mods = mod_list.get("mods", [])
 
             for mod_path in selected_mod_paths:
+                print(mod_path)
                 mod_name = os.path.basename(mod_path)
                 mod_symlink_path = os.path.join(self.server_path, mod_name)
                 is_symlink = os.path.islink(mod_symlink_path)
@@ -254,25 +284,21 @@ class ModLoaderApp(QWidget):
                             continue
                         try:
                             subprocess.check_call('mklink /J "%s" "%s"' % (mod_symlink_path, mod_path), shell=True)
-                        except CalledProcessError as e:
-                            QtWidgets.QMessageBox.warning(self, "Error", f"Failed to create symlink: {e}")
-                    else:
-                        print(f"Symlink already exists: {mod_symlink_path}")
-                        # Print the original mod path from the symlink
-                        original_mod_path = os.readlink(mod_symlink_path)
-                        print(f"Original mod path: {original_mod_path}")
-                    
+                        except subprocess.CalledProcessError as e:
+                            if e.returncode != 1:
+                                QtWidgets.QMessageBox.warning(self, "Error", f"Failed to create symlink: {e}")
+
+                # Adding this outside the if condition to ensure that the mod path is always added to the mod_list_mods list.
+                if mod_path not in mod_list_mods:
                     mod_list_mods.append(mod_path)
 
             mod_list["mods"] = mod_list_mods
             self.mods[mod_list_name] = mod_list
             save_mods(self.MODS_JSON_PATH, self.mods)
+
             self.update_mod_and_config_tables()
 
         print("Done adding mods")
-
-
-
 
     def remove_selected_mod(self, row):
         mod_list_name = self.get_selected_mod_list_name()
@@ -289,17 +315,19 @@ class ModLoaderApp(QWidget):
             mod_list_mods = mod_list.get("mods", [])
 
             mod_symlink_path = ""
+            mod_to_remove = ""
             for path in mod_list_mods:
                 if os.path.basename(path) == mod_name:
-                    mod_symlink_path = path
+                    mod_symlink_path = os.path.join(self.server_path, mod_name)
+                    mod_to_remove = path
                     break
 
-            if not mod_symlink_path:
+            if not mod_symlink_path or not mod_to_remove:
                 QtWidgets.QMessageBox.warning(self, "Error", "Could not find the symlink path for the selected mod.")
                 return
 
             # Remove the mod from the mods dict
-            mod_list_mods.remove(mod_symlink_path)
+            mod_list_mods.remove(mod_to_remove)
             mod_list["mods"] = mod_list_mods
             self.mods[mod_list_name] = mod_list
 
@@ -308,7 +336,7 @@ class ModLoaderApp(QWidget):
 
             # Check if the symlink is used in other mod lists
             if not self.symlink_exists_in_other_mod_lists(mod_list_name, mod_symlink_path):
-                # Remove the junction if it's not used in other mod lists
+            # Remove the junction if it's not used in other mod lists
                 try:
                     subprocess.run(f'rmdir "{mod_symlink_path}"', shell=True, check=True)
                 except subprocess.CalledProcessError as e:
@@ -320,14 +348,28 @@ class ModLoaderApp(QWidget):
     def save_mods(self):
         with open(self.MODS_JSON_PATH, "w") as f:
             json.dump(self.mods, f)
-    
+
     def shorten_mod_path(self, mod_path):
         # Normalize path separators
         mod_path = os.path.normpath(mod_path).replace('\\', '/')
-        workshop_path_normalized = os.path.normpath(self.workshop_path).replace('\\', '/')
+        print(f"Normalized mod_path: {mod_path}")
 
-        if mod_path.startswith(workshop_path_normalized):
-            return mod_path.replace(workshop_path_normalized, "!workshop", 1)
+        if "!Workshop" in mod_path:
+            # If it's a symlink, resolve it
+            if os.path.islink(mod_path):
+                mod_path = os.readlink(mod_path)
+                print(f"Resolved symlink: {mod_path}")
+                mod_path = os.path.normpath(mod_path).replace('\\', '/')
+                print(f"Normalized symlink: {mod_path}")
+            
+            try:
+                # Extract portion of the path from "@" onward
+                mod_path = mod_path[mod_path.index("@"):]
+                # Prefix with "!workshop"
+                return "!workshop" + mod_path
+            except ValueError:
+                print(f"Warning: '@' symbol not found in mod_path: {mod_path}")
+                return mod_path
         elif mod_path.startswith("P:"):
             return mod_path.replace("P:", "!local", 1)
         return mod_path
@@ -345,46 +387,50 @@ class ModLoaderApp(QWidget):
                 mod_name = os.path.basename(mod_path)
                 mod_name_item = QtWidgets.QTableWidgetItem(mod_name)
 
-                is_symlink_or_junction = False
-                if os.path.islink(mod_path):
-                    is_symlink_or_junction = True
-                elif os.path.isdir(mod_path):
-                    child = subprocess.Popen(
-                        'fsutil reparsepoint query "{}"'.format(mod_path),
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        shell=True
-                    )
-                    self.streamdata = child.communicate()[0]
-                    rc = child.returncode
-
-                    if rc == 0:
-                        is_symlink_or_junction = True
-
-                if is_symlink_or_junction:
-                    original_source = os.readlink(mod_path)
-                    original_source = original_source.replace('\\\\?\\', '', 1)  # Strip the leading '\\?\\'
-                    shortened_original_source = self.shorten_mod_path(original_source)
-                    original_source_item = QtWidgets.QTableWidgetItem(shortened_original_source)
-                    original_source_item.setData(Qt.UserRole, original_source)  # Store the original junction path
-                    self.mod_table.setItem(row, 1, original_source_item)
-                else:
-                    mod_path = mod_path.replace('\\\\?\\', '', 1)  # Strip the leading '\\?\\'
-                    shortened_mod_path = self.shorten_mod_path(mod_path)
-                    mod_path_item = QtWidgets.QTableWidgetItem(shortened_mod_path)
-                    self.mod_table.setItem(row, 1, mod_path_item)
-
+                mod_path = mod_path.replace('\\\\?\\', '', 1)  # Strip the leading '\\?\\'
+                shortened_mod_path = self.shorten_mod_path(mod_path)
+                mod_path_item = QtWidgets.QTableWidgetItem(shortened_mod_path)
+               
                 self.mod_table.setItem(row, 0, mod_name_item)
+                self.mod_table.setItem(row, 1, mod_path_item)
 
-                # Create a delete button for each mod in the list
-                button = QPushButton("Delete")
+                button = QPushButton("Remove!")
                 button.clicked.connect(lambda _, r=row: self.remove_selected_mod(r))
                 self.mod_table.setCellWidget(row, 2, button)
-
         else:
             self.mods_label.setText("No mod list selected.")
    
 # defs modlists
+  
+    def duplicate_mod_list(self):
+        mod_list_name = self.get_selected_mod_list_name()
+        if not mod_list_name:
+            QMessageBox.critical(self, "Error", "Please select a mod list.")
+            return
+
+        new_mod_list_name, ok = QInputDialog.getText(self, "Duplicate Mod List",
+                                                    "Enter name for the new mod list:")
+
+        if ok and new_mod_list_name:
+            if new_mod_list_name in self.mods:
+                QMessageBox.warning(self, "Error", "A mod list with that name already exists.")
+                return
+
+            new_mod_list = copy.deepcopy(self.mods[mod_list_name])
+            self.mods[new_mod_list_name] = new_mod_list
+            save_mods(self.MODS_JSON_PATH, self.mods)
+
+            # Populate new row
+            row = self.mod_list_table.rowCount()
+            self.mod_list_table.insertRow(row)
+            item = QtWidgets.QTableWidgetItem(new_mod_list_name)
+            self.mod_list_table.setItem(row, 0, item)
+            options_button = QPushButton("Options")
+            options_button.clicked.connect(lambda _, r=row: self.show_server_options(r))
+            self.mod_list_table.setCellWidget(row, 1, options_button)
+            # Select the newly duplicated mod list
+            self.mod_list_table.setCurrentCell(row, 0)
+
     def symlink_exists_in_other_mod_lists(self, mod_list_name, symlink):
         for list_name, mod_list in self.mods.items():
             if list_name != mod_list_name:
@@ -401,12 +447,6 @@ class ModLoaderApp(QWidget):
         for i, mod_name in enumerate(mod_names):
             item = QtWidgets.QTableWidgetItem(mod_name)
             self.mod_list_table.setItem(i, 0, item)
-            mod_list = self.mods[mod_name]
-            dzconfig_path = mod_list.get("dz_config")
-            #button_text = os.path.basename(dzconfig_path) if dzconfig_path else "Select dzConfig"
-            #dzconfig_button = QPushButton(button_text)
-            #dzconfig_button.clicked.connect(lambda checked, mod_list_item=item, row=i: self.select_dz_config(mod_list_item, row))
-            #self.mod_list_table.setCellWidget(i, 1, dzconfig_button)
             options_button = QPushButton("Options")
             options_button.clicked.connect(lambda _, r=i: self.show_server_options(r))
             self.mod_list_table.setCellWidget(i, 2, options_button)
@@ -439,19 +479,24 @@ class ModLoaderApp(QWidget):
             return
 
         result = QMessageBox.warning(self, "Delete Mod List",
-                                    f"Are you sure you want to delete the mod list '{mod_list_name}'? "
-                                    "This will remove all the mods that are not part of other mod lists.",
+                                    f"Delete the mod list '{mod_list_name}'?.\n "
+                                    "This will remove all the mods in the mod list, as well as any junctions or symlinks unique to it ",
                                     QMessageBox.Yes | QMessageBox.No)
         if result == QMessageBox.Yes:
             mod_list = self.mods.get(mod_list_name, {})
             mod_list_mods = mod_list.get("mods", [])
 
             for mod_path in mod_list_mods:
-                if not self.symlink_exists_in_other_mod_lists(mod_list_name, mod_path):
+                # mod_symlink_path
+                mod_symlink_path = os.path.join(self.server_path, os.path.basename(mod_path))
+
+                if not self.symlink_exists_in_other_mod_lists(mod_list_name, mod_symlink_path):
+                    print(f"Mod path to remove: {mod_symlink_path}")  # printing the mod_symlink_path instead
                     try:
-                        subprocess.run(f'rmdir "{mod_path}"', shell=True, check=True)
+                        subprocess.run(f'rmdir "{mod_symlink_path}"', shell=True, check=True)
                     except subprocess.CalledProcessError as e:
                         QtWidgets.QMessageBox.warning(self, "Error", f"Failed to remove junction: {e}")
+
 
             del self.mods[mod_list_name]
             save_mods(self.MODS_JSON_PATH, self.mods)
@@ -474,14 +519,11 @@ class ModLoaderApp(QWidget):
             self.mods[mod_list_name] = {"mods": [], "dz_config": ""}
             save_mods(self.MODS_JSON_PATH, self.mods)
 
-            # Populate new row with ui elements
+            # Populate new row
             row = self.mod_list_table.rowCount()
             self.mod_list_table.insertRow(row)
             item = QtWidgets.QTableWidgetItem(mod_list_name)
             self.mod_list_table.setItem(row, 0, item)
-            #dzconfig_button = QPushButton("Select dzConfig")
-            #dzconfig_button.clicked.connect(lambda checked, mod_list_item=item, row=row: self.select_dz_config(mod_list_item, row))
-            #self.mod_list_table.setCellWidget(row, 1, dzconfig_button)
             options_button = QPushButton("Options")
             options_button.clicked.connect(lambda _, r=row: self.show_server_options(r))
             self.mod_list_table.setCellWidget(row, 1, options_button)
@@ -495,14 +537,23 @@ class ModLoaderApp(QWidget):
         if not mod_list_name:
             QMessageBox.critical(None, "Error", "Please select a mod list.")
             return
-        
+        server_options_dialog = ServerOptions(self.server_path, self)
+        server_options = self.mods.get(mod_list_name, {}).get("server_options", {})
+
+         # default values
+        default_profiles_path = os.path.join(self.server_path, "DayzServerProfile")
+        default_mission_path = os.path.join(self.server_path, "mpmissions", "dayzOffline.ChernarusPlus")
+        default_dz_config = os.path.join(self.server_path, "serverDZ.cfg")
+        server_options.setdefault("profiles_path", default_profiles_path)
+        server_options.setdefault("mission_path", default_mission_path)
+        server_options.setdefault("dz_config", default_dz_config)
+            
         server_options_dialog = ServerOptions(self.server_path, self)
         server_options = self.mods.get(mod_list_name, {}).get("server_options", {})
         print("Before setting DZConfig:", server_options.get("dz_config", ""))
         server_options_dialog.set_dzconfig_path_edit(server_options.get("dz_config", ""))
         server_options_dialog.set_profiles_path(server_options.get("profiles_path", ""))
         server_options_dialog.set_mission_path(server_options.get("mission_path", ""))
-        # dzconfig path is elsewhere for the moment
 
         # Set checkboxes
         server_options_dialog.nonavmesh_checkbox.setChecked(server_options.get("nonavmesh", False))
@@ -570,22 +621,15 @@ class ModLoaderApp(QWidget):
         admin_log = server_options.get("admin_log", False)
         net_log = server_options.get("net_log", False)
         scr_allow_file_write = server_options.get("scr_allow_file_write", False)
-
      
         print("Server Options:", server_options)
-        # Construct the command line with some defaults because we need dzdiag to run as server
+        # Construct command line
         mission_path = os.path.normpath(mission_path)
         dz_config_path = os.path.normpath(dz_config_path)
         profiles_path = os.path.normpath(profiles_path)
         mod_names = ";".join(os.path.normpath(mod_path) for mod_path in mod_list_mods)
-
-        if self.server_checkbox.isChecked():
-            server_exe = "DayZDiag_x64.exe"
-        else:
-            server_exe = "DayZServer_x64.exe"
-
+       
         cmd = (
-            f'{server_exe} '
             f'{("-nonavmesh" if nonavmesh else "")} '
             f'{("-nosplash" if nosplash else "")} '
             f'{("-noPause" if no_pause else "")} '
@@ -603,40 +647,83 @@ class ModLoaderApp(QWidget):
             f'"-mod={mod_names}" '
         )
 
-       # command line in a message box
-        msg_box = QtWidgets.QMessageBox()
-        msg_box.setWindowTitle("Ready to go")
-        msg_box.setText("The command line:")
-        msg_box.setDetailedText(cmd)
-        msg_box.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        msg_box.setInformativeText(cmd)
-        msg_box.button(QMessageBox.Ok).clicked.connect(lambda: self.run_server_command(cmd))  # Pass the command line to the run_server_command function
-        msg_box.exec_()
+        self.run_server_command(cmd)
 
-    def run_server_command(self, cmd):
+    def run_server_command(self, mod_list_name):
+        # Fetch the selected option from the combobox
+        selected_option = self.function_combobox.currentText()
+
+        if selected_option == "Server Only":
+            self.run_server(mod_list_name)
+        elif selected_option == "Diag_x64 Combo":
+            self.run_server(mod_list_name) # passing to server function for now
+        elif selected_option == "Client Only":
+            self.run_client()
+        else:
+            QMessageBox.warning(self, "Error", "Please select a valid option from the combobox.")
+
+    def run_server(self, cmd): # call diag in a hacky way here for now - hostnames in dzconfig are not working
         dayz_folder_path = os.path.abspath(os.path.join(self.workshop_path, "..", "..", "DayZ"))
-        print("checking:", dayz_folder_path)
+        print("Checking for DayZ folder:", dayz_folder_path)
 
-        # check for diag logic
-        if not self.server_checkbox.isChecked():
-            dayz_folder_path = self.server_path
-            print(dayz_folder_path)
-        os.chdir(dayz_folder_path)
+        # selected option from the combobox
+        selected_option = self.function_combobox.currentText()
+        if selected_option == "Diag_x64 Combo":
+            cmd = "DayZDiag_x64.exe" + cmd
+            cmd_list = shlex.split(cmd)
+            # server path here is dayz folder path
+            os.chdir(dayz_folder_path)
+            print("DayZ folder path:", dayz_folder_path)
+            subprocess.Popen(cmd_list, cwd=dayz_folder_path)
+            # Call run_diagx64 to run in parallel after subprocess has been launched
+            self.run_diagx64()
+        else:
+            cmd = "DayZServer_x64.exe " + cmd
+            cmd_list = shlex.split(cmd)
+            # switch to actual server path
+            os.chdir(self.server_path)
+            print("Server path:", self.server_path)
+            subprocess.Popen(cmd_list, cwd=self.server_path)
 
-        # split the command string
-        cmd_list = shlex.split(cmd)
+    def run_diagx64(self):
+        mod_list_name = self.get_selected_mod_list_name()
+        if not mod_list_name:
+            QMessageBox.critical(None, "Error", "Please select a mod list.")
+            return
 
-        print(f"cmd: {cmd}")
-        print(f"cmd_list: {cmd_list}")
+        mod_list = self.mods[mod_list_name]
+        mod_list_mods = mod_list.get("mods", [])
+        if not mod_list_mods:
+            QMessageBox.critical(None, "Error", "The selected mod list is empty.")
+            return
 
-        # start the server process
-        subprocess.Popen(cmd_list, cwd=dayz_folder_path)
+       # Combine mod names into a single string, add any server options
+        stripped_mod_paths = [self.remove_prefix(mod_path, "\\\\?\\").replace('\\', '/', -1) for mod_path in mod_list_mods]
+        mod_names = ";".join(stripped_mod_paths)
+        # Get limited options from server_options.json
+        server_options = self.mods.get(mod_list_name, {}).get("server_options", {})
+        nonavmesh = server_options.get("nonavmesh", False)
 
-        # launch client if diag is true
-        if self.server_checkbox.isChecked():
-            self.client_diagx64_commandline()
+         # Construct the command line for the client
+        cmd_client = (
+            f'DayZDiag_x64.exe {-nonavmesh} -profiles=!ClientDiagLogs -battleye=0 -connect=localhost:2302 "-mod={mod_names}"'
+        )
 
-    def client_diagx64_commandline(self):
+        # Find the client exe to run from this directory
+        client_exe_path = os.path.join(self.workshop_path, "..", "..", "DayZ", "DayZDiag_x64.exe")
+        print(f"Client executable path: {client_exe_path}")
+
+        os.chdir(os.path.dirname(client_exe_path))
+        cmd_client = cmd_client.replace("DayZDiag_x64.exe", "").strip()
+
+        import shlex
+        cmd_list_client = shlex.split(cmd_client)
+        cmd_list_client.insert(0, client_exe_path)
+
+        client_process = subprocess.Popen(cmd_list_client)
+        print(f"Client process started with PID: {client_process.pid}")
+
+    def run_client(self): # special case for dayzEditor
         mod_list_name = self.get_selected_mod_list_name()
         if not mod_list_name:
             QMessageBox.critical(None, "Error", "Please select a mod list.")
@@ -651,22 +738,16 @@ class ModLoaderApp(QWidget):
         # Combine mod names into a single string, add any server options
         stripped_mod_paths = [self.remove_prefix(mod_path, "\\\\?\\").replace('\\', '/', -1) for mod_path in mod_list_mods]
         mod_names = ";".join(stripped_mod_paths)
-        # Get options from server_options.json
-        server_options = self.mods.get(mod_list_name, {}).get("server_options", {})
-        nonavmesh = server_options.get("nonavmesh", False)
-        cmd = (
-            f'{("-nonavmesh" if nonavmesh else "")} '
-        )
-
+ 
         # Construct the command line with some constants
-        cmd = (f'DayZDiag_x64.exe {-nonavmesh} -profiles=!ClientDiagLogs -battleye=0 -connect=localhost:2302 "-mod={mod_names}"')
+        cmd = (f'DayZ_x64.exe "-mod={mod_names}"')
 
         # Find the client exe to run from this directory
-        client_exe_path = os.path.join(self.workshop_path, "..", "..", "DayZ", "DayZDiag_x64.exe")
+        client_exe_path = os.path.join(self.workshop_path, "..", "..", "DayZ", "DayZ_x64.exe")
         print(f"Client executable path: {client_exe_path}")
 
         os.chdir(os.path.dirname(client_exe_path))
-        cmd = cmd.replace("DayZDiag_x64.exe", "").strip()
+        cmd = cmd.replace("DayZ_x64.exe", "").strip()
         import shlex
         cmd_list = shlex.split(cmd)
         cmd_list.insert(0, client_exe_path)
