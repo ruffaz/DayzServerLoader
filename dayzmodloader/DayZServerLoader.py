@@ -63,9 +63,9 @@ class ModLoaderApp(QWidget):
         self.mod_list_table = QTableWidget()
         self.mod_list_table.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
         self.mod_list_table.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustToContents)
-        self.mod_list_table.setColumnCount(2)
+        self.mod_list_table.setColumnCount(3)
         self.mod_list_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.mod_list_table.setHorizontalHeaderLabels(["Mod Lists", "Server Options"])
+        self.mod_list_table.setHorizontalHeaderLabels(["Mod Lists", "Server Options", "Launch"])
 
         self.mod_list_table.verticalHeader().setVisible(False)
         self.mod_list_table.setCurrentCell(0, 0)
@@ -99,48 +99,49 @@ class ModLoaderApp(QWidget):
 
         add_mods_button = QPushButton("Add mods", self)
         add_mods_button.clicked.connect(self.add_mods)
-
+        # program options
         self.select_workshop_button = QPushButton(f"Workshop Path ({self.workshop_path})" if self.workshop_path else "Workshop Path")
         self.select_workshop_button.clicked.connect(self.browse_workshop_path)
         self.select_server_button = QPushButton(f"Server Path ({self.server_path})" if self.server_path else "Server Path")
         self.select_server_button.clicked.connect(self.browse_server_path)
-
-        self.function_combobox = QComboBox()
-        self.function_combobox.addItem("Server Only")
-        self.function_combobox.addItem("Diag_x64 Combo")
-        self.function_combobox.addItem("Client Only")
-        default_index = 1
-        self.function_combobox.setCurrentIndex(default_index)
-
-        self.function_combobox.currentIndexChanged.connect(self.update_start_button_text)
-
         self.mods_label = QLabel(self)
         self.start_button = QPushButton("Start", self)
         self.start_button.clicked.connect(lambda: self.server_commandline(self.mod_list_table.currentItem().text()) if self.mod_list_table.currentItem() else QMessageBox.warning(self, "Warning", "Please select a mod list before starting the server."))
+        print(f"Debug: Mod list name = {self.mod_list_table}")
 
         layout = QVBoxLayout()
-        layout.addWidget(self.function_combobox)
+        # layout.addWidget(self.function_combobox)
         layout.addWidget(self.mods_label)
         layout.addWidget(self.start_button)
 
-        # Add mod list names to the table
+        # populate the table with data
         mod_names = list(self.mods.keys())
         self.mod_list_table.setRowCount(len(mod_names))
         for i, mod_name in enumerate(mod_names):
             item = QtWidgets.QTableWidgetItem(mod_name)
             self.mod_list_table.setItem(i, 0, item)
             mod_list = self.mods[mod_name]
-            dzconfig_path = mod_list.get("dz_config")
-            button_text = os.path.basename(dzconfig_path) if dzconfig_path else "Select dzConfig"
-            dzconfig_button = QPushButton(button_text)
-            dzconfig_button.clicked.connect(lambda checked, mod_list_item=item, row=i: self.select_dz_config(mod_list_item, row))
-            self.mod_list_table.setCellWidget(i, 1, dzconfig_button)
+            # Add the "Options" button
+            options_button = QPushButton("Options")
+            options_button.clicked.connect(lambda _, r=i: self.show_server_options(r))
+            self.mod_list_table.setCellWidget(i, 1, options_button)
 
-        for row in range(self.mod_list_table.rowCount()):
-            button = QPushButton("Options")
-            button.clicked.connect(lambda _, r=row: self.show_server_options(r))
-            self.mod_list_table.setCellWidget(row, 1, button)
-       
+            # Create and set the combobox for the launch option
+            function_combobox = QComboBox()
+            function_combobox.addItem("Server Only")
+            function_combobox.addItem("DayzDiag_x64")
+            function_combobox.addItem("Client Only")
+            function_combobox.currentIndexChanged.connect(self.save_launch_option)
+
+            # Set the combobox value based on the loaded launch_option
+            launch_option = mod_list.get("launch_option", "Server Only")  # Default to "Server Only" if not found
+            index = function_combobox.findText(launch_option)
+            if index != -1:
+                function_combobox.setCurrentIndex(index)
+
+            self.mod_list_table.setCellWidget(i, 2, function_combobox)
+
+            
         # modlist layout
         modlist_vbox = QVBoxLayout()
         modlist_vbox.addWidget(mod_list_label)
@@ -151,7 +152,6 @@ class ModLoaderApp(QWidget):
         modlist_button_hbox.addWidget(duplicate_modlist_button)
         modlist_vbox.addLayout(modlist_button_hbox)
 
-        # mod layout server_options_vbox.addWidget(self.mods_label)
         mods_vbox = QVBoxLayout()
         mods_vbox.addWidget(self.mods_label)
         mods_vbox.addWidget(self.mod_table)
@@ -160,15 +160,12 @@ class ModLoaderApp(QWidget):
         mods_vbox.addLayout(mod_button_hbox)
 
         # Server options
-        server_box = QGroupBox("Server Options")
+        server_box = QGroupBox("Program Options")
         server_options_vbox = QHBoxLayout(server_box)
-       
         server_options_vbox.addWidget(self.select_workshop_button)
         server_options_vbox.addWidget(self.select_server_button)
-
         server_checkbox_hbox = QHBoxLayout()
         server_options_vbox.addLayout(server_checkbox_hbox)
-        server_options_vbox.addWidget(self.function_combobox)
         server_options_vbox.addWidget(self.mods_label)
         server_options_vbox.addWidget(self.start_button)
 
@@ -188,22 +185,12 @@ class ModLoaderApp(QWidget):
         self.setLayout(vbox)
 
         # Version label not auto
-        version_label = QLabel("Version: 1.0.1") 
+        version_label = QLabel("Version: 1.0.2") 
         version_label.setAlignment(Qt.AlignRight) 
         vbox.addWidget(version_label)
 
 # defs general
-
-    def update_start_button_text(self, index):
-        selected_option = self.function_combobox.currentText()
-
-        if selected_option == "Server Only":
-            self.start_button.setText("Start Server")
-        elif selected_option == "Diag_x64 Combo":
-            self.start_button.setText("Start Diag_x64")
-        elif selected_option == "Client Only":
-            self.start_button.setText("Start Client")
-
+    
     def create_data_folder(self):
             data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
             if not os.path.exists(data_folder):
@@ -345,9 +332,25 @@ class ModLoaderApp(QWidget):
             # Update the mod table
         self.update_mod_and_config_tables()
       
+    def save_launch_option(self, index):
+        # Get the combobox that emitted the signal
+        combobox = self.sender()
+        
+        # Find the row of the combobox
+        for row in range(self.mod_list_table.rowCount()):
+            if self.mod_list_table.cellWidget(row, 2) == combobox:
+                mod_list_name = self.mod_list_table.item(row, 0).text()
+                launch_option = combobox.currentText()
+                
+                if mod_list_name in self.mods:
+                    self.mods[mod_list_name]["launch_option"] = launch_option
+                    save_mods(self.MODS_JSON_PATH, self.mods)
+                break
+    
     def save_mods(self):
-        with open(self.MODS_JSON_PATH, "w") as f:
-            json.dump(self.mods, f)
+            
+            with open(self.MODS_JSON_PATH, "w") as f:
+                json.dump(self.mods, f)
 
     def shorten_mod_path(self, mod_path):
         # Normalize path separators
@@ -420,7 +423,7 @@ class ModLoaderApp(QWidget):
             self.mods[new_mod_list_name] = new_mod_list
             save_mods(self.MODS_JSON_PATH, self.mods)
 
-            # Populate new row
+            # Populate new row horrible, just horrible
             row = self.mod_list_table.rowCount()
             self.mod_list_table.insertRow(row)
             item = QtWidgets.QTableWidgetItem(new_mod_list_name)
@@ -428,8 +431,12 @@ class ModLoaderApp(QWidget):
             options_button = QPushButton("Options")
             options_button.clicked.connect(lambda _, r=row: self.show_server_options(r))
             self.mod_list_table.setCellWidget(row, 1, options_button)
-            # Select the newly duplicated mod list
-            self.mod_list_table.setCurrentCell(row, 0)
+            function_combobox = QComboBox()
+            function_combobox.addItem("Server Only")
+            function_combobox.addItem("Diag_x64 Combo")
+            function_combobox.addItem("Client Only")
+            function_combobox.currentIndexChanged.connect(lambda index, cb=function_combobox: self.update_button_text_based_on_combobox(cb))
+            self.mod_list_table.setCellWidget(row, 2, function_combobox)
 
     def symlink_exists_in_other_mod_lists(self, mod_list_name, symlink):
         for list_name, mod_list in self.mods.items():
@@ -515,10 +522,6 @@ class ModLoaderApp(QWidget):
                 QMessageBox.warning(self, "Warning", "A mod list with this name already exists.")
                 return
             
-            # Add the new mod list to the mods dict
-            self.mods[mod_list_name] = {"mods": [], "dz_config": ""}
-            save_mods(self.MODS_JSON_PATH, self.mods)
-
             # Populate new row
             row = self.mod_list_table.rowCount()
             self.mod_list_table.insertRow(row)
@@ -527,8 +530,29 @@ class ModLoaderApp(QWidget):
             options_button = QPushButton("Options")
             options_button.clicked.connect(lambda _, r=row: self.show_server_options(r))
             self.mod_list_table.setCellWidget(row, 1, options_button)
+
+            # Create and set the combobox for the new row
+            function_combobox = QComboBox()
+            function_combobox.addItem("Server Only")
+            function_combobox.addItem("Diag_x64 Combo")
+            function_combobox.addItem("Client Only")
+            function_combobox.currentIndexChanged.connect(lambda: self.save_launch_option(row))
+            self.mod_list_table.setCellWidget(row, 2, function_combobox)
+
+            # Fetch the combobox value
+            launch_option = function_combobox.currentText()
+
+            # Add the new mod list to the mods dict with the combobox value
+            self.mods[mod_list_name] = {
+                "mods": [],
+                "dz_config": "",
+                "launch_option": launch_option
+            }
+            save_mods(self.MODS_JSON_PATH, self.mods)
+
             # Select the newly created mod list
             self.mod_list_table.setCurrentCell(row, 0)
+
     
 # defs server run
  
@@ -650,12 +674,29 @@ class ModLoaderApp(QWidget):
         self.run_server_command(cmd)
 
     def run_server_command(self, mod_list_name):
-        # Fetch the selected option from the combobox
-        selected_option = self.function_combobox.currentText()
+        # Get the currently selected row
+        selected_row = self.mod_list_table.currentRow()
+        print(f"Debug: Selected row = {selected_row}")  # Debugging print statement
 
+        # If no row is selected, you can return or set a default behavior
+        if selected_row == -1:
+            QMessageBox.warning(self, "Warning", "Please select a mod list before starting the server.")
+            return
+
+        # Fetch the QComboBox from the selected row (assuming it's in column 2 or adjust as needed)
+        function_combobox = self.mod_list_table.cellWidget(selected_row, 2)  # Adjust the column index as necessary
+
+        # Check if the fetched widget is indeed a QComboBox
+        print(f"Debug: Fetched widget type = {type(function_combobox)}")  # Debugging print statement
+
+        # Get the selected option from the fetched combobox
+        selected_option = function_combobox.currentText()
+        print(f"Debug: Selected option = {selected_option}")  # Debugging print statement
+
+        # Now, proceed with your existing logic based on the selected option
         if selected_option == "Server Only":
             self.run_server(mod_list_name)
-        elif selected_option == "Diag_x64 Combo":
+        elif selected_option == "DayzDiag_x64":
             self.run_server(mod_list_name) # passing to server function for now
         elif selected_option == "Client Only":
             self.run_client()
@@ -667,8 +708,10 @@ class ModLoaderApp(QWidget):
         print("Checking for DayZ folder:", dayz_folder_path)
 
         # selected option from the combobox
-        selected_option = self.function_combobox.currentText()
-        if selected_option == "Diag_x64 Combo":
+        selected_row = self.mod_list_table.currentRow()
+        function_combobox = self.mod_list_table.cellWidget(selected_row, 2)
+        selected_option = function_combobox.currentText()
+        if selected_option == "DayzDiag_x64":
             cmd = "DayZDiag_x64.exe" + cmd
             cmd_list = shlex.split(cmd)
             # server path here is dayz folder path
